@@ -31,13 +31,34 @@ Configuration is optional and is done through an [INI configuration file](https:
 ```ini
 [general]
 # Time in seconds since the last mouse/keyboard event from which the user is considered to be idle
-idle_threshold = 45.0
+# Default: 45 seconds
+idle_threshold = 1
+# Action rate in seconds
+# Default: 1 second
+rate = 1
 
-[click]
-# click rate in seconds
-rate = 1.0
-# position as in: x, y. Empty means click wherever the mouse is
+[mouse]
+# Mouse action to perform, can be one of:
+#   - click: perform a left click
+#   - move: move the cursor between current position and the one specified in option 'position'
+#   - wheel: scroll the wheel back and forth
+# The rest of the configuration in this section is ignored if no action is supplied.
+action = click
+# Position as in: x, y. Empty means perform the action wherever the mouse is
 position =
+
+[keyboard]
+# Keyboard action to perform, can be one of:
+#   - press: press the specified key
+#   - release: release the specified key
+#   - press and release: press and release the specified key
+# The rest of the configuration in this section is ignored if no action is supplied.
+action = press and release
+# Key to press and release. Some examples of special keys that can be used:
+#    esc, enter, delete, ctrl, shift, right ctrl, left ctrl, right shift, left shift,
+#    left, up, down, right, space, esc, backspace, tab, scroll lock, print screen, insert,
+#    pause, caps lock, num lock, windows, alt, menu, page down, page up, play/pause media
+key = ctrl
 ```
 
 ## OS Supported :computer:
