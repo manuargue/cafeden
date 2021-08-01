@@ -3,21 +3,18 @@
 # Copyright (c) 2021 Coredump Labs
 # SPDX-License-Identifier: MIT
 
-import base64
-import configparser
-import io
 import logging
 import sys
 import threading
 import time
-from importlib import util
+from enum import Enum, auto
+from configparser import ConfigParser
 from pathlib import Path
 
 import keyboard
 import mouse
 import pystray
 from PIL import Image
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -34,13 +31,21 @@ is_idle = threading.Event()
 config_schema = {
     'general': {
         'idle_threshold': {'type': 'float', 'default': '45.0'},
-        'debug': {'type': 'boolean', 'default': 'false'}
-    },
-    'click': {
         'rate': {'type': 'float', 'default': '1.0'},
-        'position': {'type': 'coords', 'default': ''}
+        'debug': {'type': 'boolean', 'default': 'false'},
+    },
+    'mouse': {
+        'action': {'type': 'mouse_action', 'default': ''},
+        'position': {'type': 'coords', 'default': ''},
     }
 }
+
+
+class MouseAction(Enum):
+    CLICK = auto()
+    MOVE = auto()
+    PRESS = auto()
+    WHEEL = auto()
 
 
 def coords(val):
@@ -48,6 +53,17 @@ def coords(val):
         return None
     x, y = map(int, val.split(','))
     return x, y
+
+
+def mouse_action(val):
+    val = val.upper()
+    if not val:
+        action = None
+    elif val in MouseAction.__members__:
+        action = MouseAction[val]
+    else:
+        raise Exception(', '.join(k.lower() for k in MouseAction.__members__))
+    return action
 
 
 def create_tray_icon():
@@ -86,10 +102,13 @@ def main():
 def idle_callback(event):
     global last_interaction
     last_interaction = time.time()
-    if is_idle.is_set() and isinstance(event, mouse.ButtonEvent) \
-            and event.button == mouse.LEFT:
-        # ignore left click events when auto-clicking
-        return
+    if is_idle.is_set():
+        if isinstance(event, mouse.ButtonEvent) and event.button == mouse.LEFT:
+            # ignore left click events when auto-clicking
+            return
+        elif isinstance(event, mouse.WheelEvent):
+            # ignore wheel events
+            return
     is_idle.clear()
 
 
@@ -110,9 +129,13 @@ class ConfigValidationError(Exception):
                 f'"{self.section}": {self.message}')
 
 
-class AppConfig(configparser.ConfigParser):
+class AppConfig(ConfigParser):
     def __init__(self, schema):
-        super().__init__(converters={'coords': coords})
+        converters = {
+            'coords': coords,
+            'mouse_action': mouse_action,
+        }
+        super().__init__(converters=converters)
         # load default values from schema
         self.schema = schema
         self.read_dict({sec: {k: v['default'] for k, v in subsec.items()}
@@ -132,18 +155,25 @@ class AppConfig(configparser.ConfigParser):
 
 
 class AutoClicker(threading.Thread):
+    quanta = .2
+
     def __init__(self, config, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.daemon = True
-        self.config = config
+        self.config: AppConfig = config
 
     def run(self):
         global last_interaction
-        last_interaction = time.time()
-        setup_hooks(idle_callback)
-        idle_threshold = self.config.getfloat('general', 'idle_threshold')
-        click_rate = self.config.getfloat('click', 'rate')
 
+        setup_hooks(idle_callback)
+
+        idle_threshold = self.config.getfloat('general', 'idle_threshold')
+        action_rate = self.config.getfloat('general', 'rate')
+        mouse_action = self.config.getmouse_action('mouse', 'action')
+        mouse_position = self.config.getcoords('mouse', 'position')
+        logger.debug(f'mouse action is {mouse_action}')
+
+        last_interaction = time.time()
         while True:
             logger.debug('waiting for idle')
             is_idle.clear()
@@ -152,15 +182,32 @@ class AutoClicker(threading.Thread):
             logger.debug('idle')
 
             # perform any one-time action before setting is_idle event
-            click_position = self.config.getcoords('click', 'position')
-            if click_position:
-                mouse.move(*click_position)
+            if mouse_action:
+                if mouse_position:
+                    mouse_old_pos = mouse.get_position()
+                    mouse.move(*mouse_position)
+                if mouse_action == MouseAction.WHEEL:
+                    wheel_delta = 1
 
             is_idle.set()
+            last_action = time.time()
             while is_idle.is_set():
-                logger.debug('click')
-                mouse.click()
-                time.sleep(click_rate)
+                if time.time() - last_action >= action_rate:
+                    last_action = time.time()
+                    if mouse_action == MouseAction.CLICK:
+                        logger.debug('mouse click')
+                        mouse.click()
+                    elif mouse_action == MouseAction.MOVE:
+                        logger.debug('mouse move')
+                        if mouse.get_position() == mouse_old_pos:
+                            mouse.move(*mouse_position)
+                        else:
+                            mouse.move(*mouse_old_pos)
+                    elif mouse_action == MouseAction.WHEEL:
+                        logger.debug('mouse wheel')
+                        wheel_delta *= -1
+                        mouse.wheel(wheel_delta)
+                time.sleep(self.quanta)
 
 
 if __name__ == '__main__':
