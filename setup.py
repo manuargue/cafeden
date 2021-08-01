@@ -1,22 +1,25 @@
 # Copyright (c) 2021 Coredump Labs
 # SPDX-License-Identifier: MIT
 
-import sys
 import os
 import pathlib
+import re
+import sys
 from shutil import rmtree
-from setuptools import setup, Command
 
+from setuptools import Command, setup
+
+import cafeden
 
 HERE = pathlib.Path(__file__).parent
 
-README = (HERE / 'README.md').read_text()
+README = (HERE / 'README.md').read_text('utf-8')
+LONG_DESCRIPTION = re.sub(r':\w+:', '', README)
 BASE_URL = 'https://github.com/coredumplabs/cafeden'
-VERSION = '0.1.0'
+VERSION = cafeden.__version__
 
 
-class AllCommand(Command):
-
+class UploadCommand(Command):
     description = 'Build and publish the package.'
     user_options = []
 
@@ -43,7 +46,7 @@ setup(
     name='cafeden',
     version=VERSION,
     description='Simple auto-clicker for keeping your computer awake',
-    long_description=README,
+    long_description=LONG_DESCRIPTION,
     long_description_content_type='text/markdown',
     url=BASE_URL,
     license='MIT License',
@@ -58,6 +61,10 @@ setup(
         'Programming Language :: Python :: Implementation :: CPython'
     ],
     packages=['cafeden'],
+    package_data={
+        'cafeden': ['resources/*'],
+    },
+    include_package_data=True,
     install_requires=['keyboard', 'mouse', 'pystray', 'pillow'],
     entry_points={
         'console_scripts': [
@@ -65,6 +72,6 @@ setup(
         ]
     },
     cmdclass={
-        'all': AllCommand,
+        'upload': UploadCommand,
     },
 )

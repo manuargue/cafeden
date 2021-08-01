@@ -18,8 +18,8 @@ from PIL import Image
 from .config import AppConfig
 
 CONFIG_FILE_NAME = '.cafeden'
-CONFIG_FILES = (Path() / CONFIG_FILE_NAME, Path.home() / CONFIG_FILE_NAME)
-ICON_FILE = Path(__file__).parent.parent / 'resources' / 'icon.ico'
+CONFIG_FILES = (Path(__file__).parent / CONFIG_FILE_NAME, Path.home() / CONFIG_FILE_NAME)
+ICON_FILE = Path(__file__).parent / 'resources' / 'icon.ico'
 
 # config file schema used for datatype validation and default values
 CONFIG_SCHEMA = {
