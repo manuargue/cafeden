@@ -165,7 +165,7 @@ def idle_callback(event):
         elif mouse_cfg['action'] == 'wheel' and isinstance(event, mouse.WheelEvent):
                 # ignore wheel events
                 return
-        if keyboard_cfg['action'] and isinstance(event, keyboard.KeyboardEvent):
+        elif keyboard_cfg['action'] and isinstance(event, keyboard.KeyboardEvent):
             if event.name == keyboard_cfg['key']:
                 # ignore keyboard events for the key configured
                 return
