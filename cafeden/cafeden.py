@@ -18,7 +18,10 @@ import mouse
 import pystray
 from PIL import Image
 
-logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 CONFIG_FILENAME = '.cafeden'
 
@@ -155,6 +158,7 @@ is_idle = threading.Event()
 config_schema = {
     'general': {
         'idle_threshold': {'type': 'float', 'default': '45.0'},
+        'debug': {'type': 'boolean', 'default': 'false'}
     },
     'click': {
         'rate': {'type': 'float', 'default': '1.0'},
@@ -187,6 +191,11 @@ def create_tray_icon():
 def main():
     config = AppConfig(config_schema)
     config.read(str(Path.home().joinpath(CONFIG_FILENAME)))
+
+    is_debug = config.getboolean('general', 'debug')
+    level = logging.DEBUG if is_debug else logging.INFO
+    logging.basicConfig(level=level)
+    logger.setLevel(level)
 
     bg_thread = AutoClicker(config)
 
@@ -222,7 +231,7 @@ class ConfigValidationError(Exception):
 
     def __str__(self):
         return (f'Invalid value for "{self.key}" under section '
-                '"{self.section}": {self.message}')
+                f'"{self.section}": {self.message}')
 
 
 class AppConfig(configparser.ConfigParser):
@@ -260,11 +269,11 @@ class AutoClicker(threading.Thread):
         click_rate = self.config.getfloat('click', 'rate')
 
         while True:
-            logging.debug('waiting for idle')
+            logger.debug('waiting for idle')
             is_idle.clear()
             while time.time() - last_interaction < idle_threshold:
                 time.sleep(.5)
-            logging.debug('idle')
+            logger.debug('idle')
 
             # perform any one-time action before setting is_idle event
             click_position = self.config.getcoords('click', 'position')
@@ -273,7 +282,7 @@ class AutoClicker(threading.Thread):
 
             is_idle.set()
             while is_idle.is_set():
-                logging.debug('click')
+                logger.debug('click')
                 mouse.click()
                 time.sleep(click_rate)
 
