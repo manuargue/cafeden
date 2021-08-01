@@ -246,10 +246,3 @@ class AutoClicker(threading.Thread):
             # restore key state
             if keyboard_action == KeyboardAction.PRESS:
                 keyboard.release(key_to_press)
-
-
-if __name__ == '__main__':
-    try:
-        main()
-    except Exception as ex:
-        sys.exit(ex)
