@@ -22,7 +22,8 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-CONFIG_FILE = Path.home() / '.cafeden'
+CONFIG_FILE_NAME = '.cafeden'
+CONFIG_FILES = (Path() / CONFIG_FILE_NAME, Path.home() / CONFIG_FILE_NAME)
 ICON_FILE = Path(__file__).parent.parent / 'resources' / 'icon.ico'
 
 # globals
@@ -65,7 +66,7 @@ def create_tray_icon():
 
 def main():
     config = AppConfig(config_schema)
-    config.read(str(CONFIG_FILE))
+    config.read(CONFIG_FILES)
 
     is_debug = config.getboolean('general', 'debug')
     level = logging.DEBUG if is_debug else logging.INFO
