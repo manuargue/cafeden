@@ -17,20 +17,12 @@ from PIL import Image
 
 from .config import AppConfig
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 CONFIG_FILE_NAME = '.cafeden'
 CONFIG_FILES = (Path() / CONFIG_FILE_NAME, Path.home() / CONFIG_FILE_NAME)
 ICON_FILE = Path(__file__).parent.parent / 'resources' / 'icon.ico'
 
-# globals
-last_interaction = time.time()
-is_idle: threading.Event = threading.Event()
-config: AppConfig = None
-
 # config file schema used for datatype validation and default values
-config_schema = {
+CONFIG_SCHEMA = {
     'general': {
         'idle_threshold': {'type': 'float', 'default': '45.0'},
         'rate': {'type': 'float', 'default': '1.0'},
@@ -45,6 +37,16 @@ config_schema = {
         'key': {'type': 'key', 'default': ''},
     }
 }
+
+# globals
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+config: AppConfig = None
+
+last_interaction = time.time()
+is_idle: threading.Event = threading.Event()
+
 
 class MouseAction(Enum):
     CLICK = auto()
@@ -130,7 +132,7 @@ def main():
         'keyboard_action': validate_keyboard_action,
         'key': validate_key,
     }
-    config = AppConfig(config_schema, config_validators)
+    config = AppConfig(CONFIG_SCHEMA, config_validators)
     config.read(CONFIG_FILES)
 
     is_debug = config.getboolean('general', 'debug')
