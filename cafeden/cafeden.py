@@ -8,13 +8,14 @@ import sys
 import threading
 import time
 from enum import Enum, auto
-from configparser import ConfigParser
 from pathlib import Path
 
 import keyboard
 import mouse
 import pystray
 from PIL import Image
+
+from .config import AppConfig
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -25,7 +26,8 @@ ICON_FILE = Path(__file__).parent.parent / 'resources' / 'icon.ico'
 
 # globals
 last_interaction = time.time()
-is_idle = threading.Event()
+is_idle: threading.Event = threading.Event()
+config: AppConfig = None
 
 # config file schema used for datatype validation and default values
 config_schema = {
@@ -37,9 +39,12 @@ config_schema = {
     'mouse': {
         'action': {'type': 'mouse_action', 'default': ''},
         'position': {'type': 'coords', 'default': ''},
+    },
+    'keyboard': {
+        'action': {'type': 'keyboard_action', 'default': ''},
+        'key': {'type': 'key', 'default': ''},
     }
 }
-
 
 class MouseAction(Enum):
     CLICK = auto()
@@ -47,23 +52,59 @@ class MouseAction(Enum):
     PRESS = auto()
     WHEEL = auto()
 
+    @classmethod
+    def to_options(cls):
+        return ', '.join(k.lower() for k in cls.__members__)
 
-def coords(val):
+
+class KeyboardAction(Enum):
+    PRESS = auto()
+    RELEASE = auto()
+    PRESS_AND_RELEASE = auto()
+
+    @classmethod
+    def to_options(cls):
+        return ', '.join(k.lower().replace('_', ' ') for k in cls.__members__)
+
+
+def validate_coords(val):
     if val == '':
         return None
     x, y = map(int, val.split(','))
     return x, y
 
 
-def mouse_action(val):
-    val = val.upper()
-    if not val:
+def validate_mouse_action(val):
+    action = val.upper().strip()
+    if not action:
         action = None
-    elif val in MouseAction.__members__:
-        action = MouseAction[val]
+    elif action in MouseAction.__members__:
+        action = MouseAction[action]
     else:
-        raise Exception(', '.join(k.lower() for k in MouseAction.__members__))
+        raise Exception(f'valid values are {MouseAction.to_options()}')
     return action
+
+
+def validate_keyboard_action(val):
+    action = val.upper().strip().replace(' ', '_')
+    if not action:
+        action = None
+    elif action in KeyboardAction.__members__:
+        action = KeyboardAction[action]
+    else:
+        raise Exception(f'valid values are {KeyboardAction.to_options()}')
+    return action
+
+
+def validate_key(val):
+    if not val:
+        return None
+    key = keyboard.normalize_name(val)
+    key_names = keyboard._canonical_names
+    if key not in key_names.canonical_names.values() \
+            and key not in key_names.all_modifiers:
+        raise Exception(f'"{val}"" is not a valid key')
+    return key
 
 
 def create_tray_icon():
@@ -81,7 +122,15 @@ def create_tray_icon():
 
 
 def main():
-    config = AppConfig(config_schema)
+    global config
+
+    config_validators = {
+        'coords': validate_coords,
+        'mouse_action': validate_mouse_action,
+        'keyboard_action': validate_keyboard_action,
+        'key': validate_key,
+    }
+    config = AppConfig(config_schema, config_validators)
     config.read(CONFIG_FILES)
 
     is_debug = config.getboolean('general', 'debug')
@@ -89,7 +138,7 @@ def main():
     logging.basicConfig(level=level)
     logger.setLevel(level)
 
-    bg_thread = AutoClicker(config)
+    bg_thread = AutoClicker()
 
     # TODO: the clicker thread could actually be turned into a function
     # and passed as the setup cb to icon.run()
@@ -102,13 +151,22 @@ def main():
 def idle_callback(event):
     global last_interaction
     last_interaction = time.time()
+
+    mouse_cfg = config['mouse']
+    keyboard_cfg = config['keyboard']
+
     if is_idle.is_set():
-        if isinstance(event, mouse.ButtonEvent) and event.button == mouse.LEFT:
-            # ignore left click events when auto-clicking
-            return
-        elif isinstance(event, mouse.WheelEvent):
-            # ignore wheel events
-            return
+        if mouse_cfg['action'] == 'click' and isinstance(event, mouse.ButtonEvent):
+            if event.button == mouse.LEFT:
+                # ignore left click events when auto-clicking
+                return
+        elif mouse_cfg['action'] == 'wheel' and isinstance(event, mouse.WheelEvent):
+                # ignore wheel events
+                return
+        if keyboard_cfg['action'] and isinstance(event, keyboard.KeyboardEvent):
+            if event.name == keyboard_cfg['key']:
+                # ignore keyboard events for the key configured
+                return
     is_idle.clear()
 
 
@@ -117,61 +175,26 @@ def setup_hooks(cb):
     mouse.hook(cb)
 
 
-class ConfigValidationError(Exception):
-    def __init__(self, message, section, key):
-        super().__init__(message)
-        self.section = section
-        self.key = key
-        self.message = message
-
-    def __str__(self):
-        return (f'Invalid value for "{self.key}" under section '
-                f'"{self.section}": {self.message}')
-
-
-class AppConfig(ConfigParser):
-    def __init__(self, schema):
-        converters = {
-            'coords': coords,
-            'mouse_action': mouse_action,
-        }
-        super().__init__(converters=converters)
-        # load default values from schema
-        self.schema = schema
-        self.read_dict({sec: {k: v['default'] for k, v in subsec.items()}
-                       for sec, subsec in schema.items()})
-
-    def read(self, filenames, *args):
-        super().read(filenames, *args)
-        self._validate()
-
-    def _validate(self):
-        for section, keys in config_schema.items():
-            for key, options in keys.items():
-                try:
-                    getattr(self, f'get{options["type"]}')(section, key)
-                except Exception as ex:
-                    raise ConfigValidationError(str(ex), section, key)
-
-
 class AutoClicker(threading.Thread):
     quanta = .2
 
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.daemon = True
-        self.config: AppConfig = config
 
     def run(self):
         global last_interaction
 
         setup_hooks(idle_callback)
 
-        idle_threshold = self.config.getfloat('general', 'idle_threshold')
-        action_rate = self.config.getfloat('general', 'rate')
-        mouse_action = self.config.getmouse_action('mouse', 'action')
-        mouse_position = self.config.getcoords('mouse', 'position')
+        idle_threshold = config.getfloat('general', 'idle_threshold')
+        action_rate = config.getfloat('general', 'rate')
+        mouse_action = config.getmouse_action('mouse', 'action')
+        mouse_position = config.getcoords('mouse', 'position')
+        keyboard_action = config.getkeyboard_action('keyboard', 'action')
+        key_to_press = config.getkey('keyboard', 'key')
         logger.debug(f'mouse action is {mouse_action}')
+        logger.debug(f'keyboard action is {keyboard_action}')
 
         last_interaction = time.time()
         while True:
@@ -194,6 +217,7 @@ class AutoClicker(threading.Thread):
             while is_idle.is_set():
                 if time.time() - last_action >= action_rate:
                     last_action = time.time()
+                    # mouse actions
                     if mouse_action == MouseAction.CLICK:
                         logger.debug('mouse click')
                         mouse.click()
@@ -207,7 +231,21 @@ class AutoClicker(threading.Thread):
                         logger.debug('mouse wheel')
                         wheel_delta *= -1
                         mouse.wheel(wheel_delta)
+                    # keyboard actions
+                    if keyboard_action == KeyboardAction.PRESS:
+                        logger.debug('keyboard press')
+                        keyboard.press(key_to_press)
+                    elif keyboard_action == KeyboardAction.RELEASE:
+                        logger.debug('keyboard release')
+                        keyboard.release(key_to_press)
+                    elif keyboard_action == KeyboardAction.PRESS_AND_RELEASE:
+                        logger.debug('keyboard press and release')
+                        keyboard.press_and_release(key_to_press)
                 time.sleep(self.quanta)
+
+            # restore key state
+            if keyboard_action == KeyboardAction.PRESS:
+                keyboard.release(key_to_press)
 
 
 if __name__ == '__main__':
