@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Coredump Labs
+# Copyright (c) 2021-2022 Manuel Arguelles
 # SPDX-License-Identifier: MIT
 
 import os
@@ -15,7 +15,7 @@ HERE = pathlib.Path(__file__).parent
 
 README = (HERE / 'README.md').read_text('utf-8')
 LONG_DESCRIPTION = re.sub(r':\w+:', '', README)
-BASE_URL = 'https://github.com/coredumplabs/cafeden'
+BASE_URL = 'https://github.com/manuargue/cafeden'
 VERSION = cafeden.__version__
 
 
@@ -50,8 +50,8 @@ setup(
     long_description_content_type='text/markdown',
     url=BASE_URL,
     license='MIT License',
-    author='Coredump Labs',
-    author_email='info@coredumplabs.com',
+    author='Manuel Arguelles',
+    author_email='manuel.arguelles@coredumplabs.com',
     download_url=f'{BASE_URL}/releases/tag/v{VERSION}',
     classifiers=[
         'License :: OSI Approved :: MIT License',

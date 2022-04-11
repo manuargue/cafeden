@@ -71,6 +71,6 @@ key = ctrl
 
 ## License :page_with_curl:
 
-Copyright &copy; 2021 Coredump Labs
+Copyright &copy; 2021-2022 Manuel Arguelles
 
 Licensed under MIT: https://opensource.org/licenses/MIT

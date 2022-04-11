@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) 2021 Coredump Labs
+# Copyright (c) 2021-2022 Manuel Arguelles
 # SPDX-License-Identifier: MIT
 
 import sys
